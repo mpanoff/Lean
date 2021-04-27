@@ -17,9 +17,11 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using QuantConnect.Data.Market;
 using QuantConnect.Interfaces;
 using QuantConnect.Orders;
 using QuantConnect.Securities;
+using QuantConnect.Util;
 
 namespace QuantConnect
 {
@@ -44,7 +46,7 @@ namespace QuantConnect
         private HashSet<SymbolCapacity> _monitoredSymbolCapacitySet;
         private DateTime _nextSnapshotDate;
         private TimeSpan _snapshotPeriod;
-        private Symbol _smallestAssetSymbol;
+        private readonly Dictionary<Symbol, decimal> _smallestCapacityBySymbol;
 
         /// <summary>
         /// The total capacity of the strategy at a point in time
@@ -54,7 +56,19 @@ namespace QuantConnect
         /// <summary>
         /// Provide a reference to the lowest capacity symbol used in scaling down the capacity for debugging.
         /// </summary>
-        public Symbol LowestCapacityAsset => _smallestAssetSymbol; 
+        public Symbol LowestCapacityAsset
+        {
+            get
+            {
+                if (_smallestCapacityBySymbol.IsNullOrEmpty())
+                {
+                    return null;
+                }
+
+                return _smallestCapacityBySymbol
+                    .OrderBy(kvp => kvp.Value).FirstOrDefault().Key;
+            }
+        }
 
         /// <summary>
         /// Initializes an instance of the class.
@@ -64,6 +78,7 @@ namespace QuantConnect
         {
             _algorithm = algorithm;
             _capacityBySymbol = new Dictionary<Symbol, SymbolCapacity>();
+            _smallestCapacityBySymbol = new Dictionary<Symbol, decimal>();
             _monitoredSymbolCapacity = new List<SymbolCapacity>();
             _monitoredSymbolCapacitySet = new HashSet<SymbolCapacity>();
             // Set the minimum snapshot period to one day, but use algorithm start/end if the algo runtime is less than seven days
@@ -145,8 +160,6 @@ namespace QuantConnect
                     .OrderBy(c => c.MarketCapacityDollarVolume)
                     .First();
 
-                _smallestAssetSymbol = smallestAsset.Security.Symbol;
-
                 // When there is no trading, rely on the portfolio holdings
                 var percentageOfSaleVolume = totalSaleVolume != 0
                     ? smallestAsset.SaleVolume / totalSaleVolume
@@ -164,6 +177,13 @@ namespace QuantConnect
                     ? Capacity
                     : dailyMarketCapacityDollarVolume / scalingFactor;
 
+                decimal lastCapacity;
+                var symbol = smallestAsset.Security.Symbol;
+                if (!_smallestCapacityBySymbol.TryGetValue(symbol, out lastCapacity) || lastCapacity > newCapacity)
+                {
+                    _smallestCapacityBySymbol[symbol] = newCapacity;
+                }
+
                 if (Capacity == 0)
                 {
                     Capacity = newCapacity;
@@ -172,6 +192,9 @@ namespace QuantConnect
                 {
                     Capacity = (0.33m * newCapacity) + (Capacity * 0.66m);
                 }
+
+                var volume = smallestAsset.Security.Cache.GetData<TradeBar>()?.Volume ?? 0;
+                Logging.Log.Trace($"{_algorithm.UtcTime} : {symbol} : Volume {volume} : Capacity {Capacity:F}");
 
                 foreach (var symbolCapacity in _capacityBySymbol.Values)
                 {
