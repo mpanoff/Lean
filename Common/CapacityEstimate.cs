@@ -179,7 +179,11 @@ namespace QuantConnect
 
                 decimal lastCapacity;
                 var symbol = smallestAsset.Security.Symbol;
-                if (!_smallestCapacityBySymbol.TryGetValue(symbol, out lastCapacity) || lastCapacity > newCapacity)
+                if (_smallestCapacityBySymbol.TryGetValue(symbol, out lastCapacity))
+                {
+                    _smallestCapacityBySymbol[symbol] = (0.33m * newCapacity) + (lastCapacity * 0.66m);
+                }
+                else
                 {
                     _smallestCapacityBySymbol[symbol] = newCapacity;
                 }
