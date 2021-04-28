@@ -182,6 +182,7 @@ namespace QuantConnect
                 }
 
                 var smallestAsset = _capacityBySymbol.Values
+                    .Where(c => c.Security.Invested)
                     .OrderBy(c => c.MarketCapacityDollarVolume)
                     .First();
 
