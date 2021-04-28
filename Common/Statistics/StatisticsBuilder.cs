@@ -13,11 +13,10 @@
  * limitations under the License.
 */
 
+using QuantConnect.Util;
 using System;
 using System.Collections.Generic;
 using System.Linq;
-using QuantConnect.Logging;
-using QuantConnect.Util;
 
 namespace QuantConnect.Statistics
 {
@@ -170,10 +169,12 @@ namespace QuantConnect.Statistics
         {
             var capacity = 0m;
             var lowestCapacitySymbol = Symbol.Empty;
+            var lowestCapacitySymbolByOccurence = Symbol.Empty;
             if (estimatedStrategyCapacity != null)
             {
                 capacity = estimatedStrategyCapacity.Capacity;
                 lowestCapacitySymbol = estimatedStrategyCapacity.LowestCapacityAsset ?? Symbol.Empty;
+                lowestCapacitySymbolByOccurence = estimatedStrategyCapacity.LowestCapacityAssetByOccurence ?? Symbol.Empty;
             }
 
             return new Dictionary<string, string>
@@ -200,6 +201,7 @@ namespace QuantConnect.Statistics
                 { "Total Fees", "$" + totalFees.ToStringInvariant("0.00") },
                 { "Estimated Strategy Capacity", "$" + capacity.RoundToSignificantDigits(2).ToStringInvariant() },
                 { "Lowest Capacity Asset", lowestCapacitySymbol.ToString() },
+                { "Lowest Capacity Asset By Occurence", lowestCapacitySymbolByOccurence.ToString() },
             };
         }
 

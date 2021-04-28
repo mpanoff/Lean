@@ -46,7 +46,7 @@ namespace QuantConnect
         private HashSet<SymbolCapacity> _monitoredSymbolCapacitySet;
         private DateTime _nextSnapshotDate;
         private TimeSpan _snapshotPeriod;
-        private readonly Dictionary<Symbol, decimal> _smallestCapacityBySymbol;
+        private readonly Dictionary<Symbol, SmallestCapacity> _smallestCapacityBySymbol;
 
         /// <summary>
         /// The total capacity of the strategy at a point in time
@@ -65,8 +65,33 @@ namespace QuantConnect
                     return null;
                 }
 
-                return _smallestCapacityBySymbol
-                    .OrderBy(kvp => kvp.Value).FirstOrDefault().Key;
+                var lowestCapacityAsset = _smallestCapacityBySymbol
+                    .OrderBy(kvp => kvp.Value.Average).FirstOrDefault();
+
+                Logging.Log.Trace($"LowestCapacityAsset: {lowestCapacityAsset}");
+
+                return lowestCapacityAsset.Key;
+            }
+        }
+
+        /// <summary>
+        /// Provide a reference to the lowest capacity symbol used in scaling down the capacity for debugging.
+        /// </summary>
+        public Symbol LowestCapacityAssetByOccurence
+        {
+            get
+            {
+                if (_smallestCapacityBySymbol.IsNullOrEmpty())
+                {
+                    return null;
+                }
+
+                var lowestCapacityAsset = _smallestCapacityBySymbol
+                    .OrderByDescending(kvp => kvp.Value.Count).FirstOrDefault();
+
+                Logging.Log.Trace($"LowestCapacityAssetByOccurence: {lowestCapacityAsset}");
+
+                return lowestCapacityAsset.Key;
             }
         }
 
@@ -78,7 +103,7 @@ namespace QuantConnect
         {
             _algorithm = algorithm;
             _capacityBySymbol = new Dictionary<Symbol, SymbolCapacity>();
-            _smallestCapacityBySymbol = new Dictionary<Symbol, decimal>();
+            _smallestCapacityBySymbol = new Dictionary<Symbol, SmallestCapacity>();
             _monitoredSymbolCapacity = new List<SymbolCapacity>();
             _monitoredSymbolCapacitySet = new HashSet<SymbolCapacity>();
             // Set the minimum snapshot period to one day, but use algorithm start/end if the algo runtime is less than seven days
@@ -177,16 +202,14 @@ namespace QuantConnect
                     ? Capacity
                     : dailyMarketCapacityDollarVolume / scalingFactor;
 
-                decimal lastCapacity;
+                SmallestCapacity smallestCapacity;
                 var symbol = smallestAsset.Security.Symbol;
-                if (_smallestCapacityBySymbol.TryGetValue(symbol, out lastCapacity))
+                if (!_smallestCapacityBySymbol.TryGetValue(symbol, out smallestCapacity))
                 {
-                    _smallestCapacityBySymbol[symbol] = (0.33m * newCapacity) + (lastCapacity * 0.66m);
+                    _smallestCapacityBySymbol[symbol] = new SmallestCapacity();
                 }
-                else
-                {
-                    _smallestCapacityBySymbol[symbol] = newCapacity;
-                }
+
+                _smallestCapacityBySymbol[symbol].Update(newCapacity);
 
                 if (Capacity == 0)
                 {
@@ -198,7 +221,6 @@ namespace QuantConnect
                 }
 
                 var volume = smallestAsset.Security.Cache.GetData<TradeBar>()?.Volume ?? 0;
-                Logging.Log.Trace($"{_algorithm.UtcTime} : {symbol} : Volume {volume} : Capacity {Capacity:F}");
 
                 foreach (var symbolCapacity in _capacityBySymbol.Values)
                 {
@@ -207,6 +229,20 @@ namespace QuantConnect
 
                 _nextSnapshotDate = utcDate + _snapshotPeriod;
             }
+        }
+
+        private class SmallestCapacity
+        {
+            public int Count;
+            public decimal Average;
+
+            public void Update(decimal capacity)
+            {
+                Count++;
+                Average = (0.33m * capacity) + (Average * 0.66m);
+            }
+
+            public override string ToString() => $"{Count} : {Average:F}";
         }
     }
 }
