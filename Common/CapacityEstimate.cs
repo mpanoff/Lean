@@ -220,7 +220,7 @@ namespace QuantConnect
                     Capacity = (0.33m * newCapacity) + (Capacity * 0.66m);
                 }
 
-                var volume = smallestAsset.Security.Cache.GetData<TradeBar>()?.Volume ?? 0;
+                Logging.Log.Trace($"{utcDate} :: New Capacity: {newCapacity:F} :: Capacity: {Capacity:F}");
 
                 foreach (var symbolCapacity in _capacityBySymbol.Values)
                 {
