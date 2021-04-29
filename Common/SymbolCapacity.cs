@@ -50,6 +50,8 @@ namespace QuantConnect
         private OrderEvent _previousOrderEvent;
         private readonly Resolution _resolution;
 
+        public OrderEvent PreviousOrderEvent => _previousOrderEvent;
+
         /// <summary>
         /// Total trades made in between snapshots
         /// </summary>

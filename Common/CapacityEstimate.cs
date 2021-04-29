@@ -47,11 +47,17 @@ namespace QuantConnect
         private DateTime _nextSnapshotDate;
         private TimeSpan _snapshotPeriod;
         private readonly Dictionary<Symbol, SmallestCapacity> _smallestCapacityBySymbol;
+        private readonly List<decimal> _capacityHistory;
 
         /// <summary>
         /// The total capacity of the strategy at a point in time
         /// </summary>
         public decimal Capacity { get; private set; }
+
+        /// <summary>
+        /// The total capacity of the strategy at a point in time
+        /// </summary>
+        public decimal MinimumCapacity { get; private set; }
 
         /// <summary>
         /// Provide a reference to the lowest capacity symbol used in scaling down the capacity for debugging.
@@ -68,7 +74,7 @@ namespace QuantConnect
                 var lowestCapacityAsset = _smallestCapacityBySymbol
                     .OrderBy(kvp => kvp.Value.Average).FirstOrDefault();
 
-                Logging.Log.Trace($"LowestCapacityAsset: {lowestCapacityAsset}");
+                //Logging.Log.Trace($"LowestCapacityAsset: {lowestCapacityAsset}");
 
                 return lowestCapacityAsset.Key;
             }
@@ -89,7 +95,7 @@ namespace QuantConnect
                 var lowestCapacityAsset = _smallestCapacityBySymbol
                     .OrderByDescending(kvp => kvp.Value.Count).FirstOrDefault();
 
-                Logging.Log.Trace($"LowestCapacityAssetByOccurence: {lowestCapacityAsset}");
+                //Logging.Log.Trace($"LowestCapacityAssetByOccurence: {lowestCapacityAsset}");
 
                 return lowestCapacityAsset.Key;
             }
@@ -103,6 +109,7 @@ namespace QuantConnect
         {
             _algorithm = algorithm;
             _capacityBySymbol = new Dictionary<Symbol, SymbolCapacity>();
+            _capacityHistory = new List<decimal>();
             _smallestCapacityBySymbol = new Dictionary<Symbol, SmallestCapacity>();
             _monitoredSymbolCapacity = new List<SymbolCapacity>();
             _monitoredSymbolCapacitySet = new HashSet<SymbolCapacity>();
@@ -182,9 +189,14 @@ namespace QuantConnect
                 }
 
                 var smallestAsset = _capacityBySymbol.Values
-                    .Where(c => c.Security.Invested)
+                    .Where(c => c.Security.Invested || c.PreviousOrderEvent.UtcTime.Add(_snapshotPeriod) > utcDate)
                     .OrderBy(c => c.MarketCapacityDollarVolume)
-                    .First();
+                    .FirstOrDefault();
+
+                if (smallestAsset == null)
+                {
+                    return;
+                }
 
                 // When there is no trading, rely on the portfolio holdings
                 var percentageOfSaleVolume = totalSaleVolume != 0
@@ -212,6 +224,11 @@ namespace QuantConnect
 
                 _smallestCapacityBySymbol[symbol].Update(newCapacity);
 
+                _capacityHistory.Add(newCapacity);
+                Capacity = _capacityHistory.Average();
+                MinimumCapacity = _capacityHistory.Min();
+
+                /*
                 if (Capacity == 0)
                 {
                     Capacity = newCapacity;
@@ -220,8 +237,8 @@ namespace QuantConnect
                 {
                     Capacity = (0.33m * newCapacity) + (Capacity * 0.66m);
                 }
-
-                Logging.Log.Trace($"{utcDate} :: New Capacity: {newCapacity:F} :: Capacity: {Capacity:F}");
+                */
+                // Logging.Log.Trace($"{utcDate} :: New Capacity: {newCapacity:F} :: Capacity: {Capacity:F}");
 
                 foreach (var symbolCapacity in _capacityBySymbol.Values)
                 {
