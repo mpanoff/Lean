@@ -135,8 +135,15 @@ namespace QuantConnect
                 }
 
                 var smallestAsset = _capacityBySymbol.Values
+                    // Do not account securities that have been delisted since the last snapshot
+                    .Where(c => !c.Security.IsDelisted)
                     .OrderBy(c => c.MarketCapacityDollarVolume)
-                    .First();
+                    .FirstOrDefault();
+
+                if (smallestAsset == null)
+                {
+                    return;
+                }
 
                 _smallestAssetSymbol = smallestAsset.Security.Symbol;
 
